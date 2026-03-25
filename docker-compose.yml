@@ -1,0 +1,95 @@
+# MDX2_DOCKERFILE selects how mdx2 is installed:
+#   Dockerfile        (default) — pulls pre-built image from Docker Hub (fast)
+#   Dockerfile.source           — clones mdx2 at MDX2_COMMIT and builds from source (slow, for development)
+#
+# MDX2_IMAGE_TAG: Docker Hub tag for diffuseproject/mdx2 (only used with Dockerfile)
+# MDX2_COMMIT:    Git commit/branch/tag to build from   (only used with Dockerfile.source)
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: prefect
+      POSTGRES_DB: prefect
+    volumes:
+      - prefect_postgres_data:/var/lib/postgresql/data
+    networks:
+      - prefect-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prefect -d prefect"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  prefect-server:
+    image: prefecthq/prefect:2.20-python3.11
+    command: ["prefect", "server", "start", "--host", "0.0.0.0", "--port", "4200"]
+    ports:
+      - "4200:4200"
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - PREFECT_UI_API_URL=http://localhost:4200/api
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
+    networks:
+      - prefect-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health').getcode()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  flow-runner:
+    build:
+      context: .
+      dockerfile: ${MDX2_DOCKERFILE:-Dockerfile}
+      args:
+        MDX2_IMAGE_TAG: ${MDX2_IMAGE_TAG:-1.0.0}
+        MDX2_COMMIT: ${MDX2_COMMIT:-main}
+    working_dir: /home/dev
+    volumes:
+      - ..:/home/workspace
+      - /mnt/chess:/mnt/chess
+      - .:/home/dev
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    networks:
+      - prefect-net
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    command: ["sh", "-c", "sleep 5 && micromamba run -n mdx2-dev python prefect/prefect_flows.py"]
+    restart: unless-stopped
+
+  container:
+    build:
+      context: .
+      dockerfile: ${MDX2_DOCKERFILE:-Dockerfile}
+      args:
+        MDX2_IMAGE_TAG: ${MDX2_IMAGE_TAG:-1.0.0}
+        MDX2_COMMIT: ${MDX2_COMMIT:-main}
+    working_dir: /home/dev
+    environment:
+      - PYTHONPATH=/home/dev/mdx2
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    volumes:
+      - ..:/home/workspace
+      - /mnt/chess:/mnt/chess
+      - /mnt/als:/mnt/als
+      - ..:/home/dev
+    ports:
+      - "8888:8888"
+    networks:
+      - prefect-net
+    command: ["tail", "-f", "/dev/null"]
+
+networks:
+  prefect-net:
+    driver: bridge
+
+volumes:
+  prefect_postgres_data:

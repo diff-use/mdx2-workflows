@@ -373,7 +373,7 @@ if __name__ == "__main__":
     import os
     from prefect import serve
 
-    from mdx2.command_line.pipeline import single_crystal_workflow
+    from mdx2_workflows.pipeline import single_crystal_workflow
 
     api_url = os.getenv("PREFECT_API_URL", "http://localhost:4200/api")
     os.environ["PREFECT_API_URL"] = api_url

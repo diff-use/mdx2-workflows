@@ -1,0 +1,48 @@
+# Source mode: clone mdx2 at a specific commit and build from scratch.
+# Slower — rebuilds the full conda environment from the commit's env.yaml,
+# guaranteeing that dependencies match the mdx2 code. Use for development
+# or testing unreleased changes.
+ARG MDX2_COMMIT=main
+
+FROM mambaorg/micromamba:1.5.5 AS micromamba_stage
+
+FROM python:3.10-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=micromamba_stage /bin/micromamba /usr/local/bin/micromamba
+
+ENV MAMBA_ROOT_PREFIX="/root/micromamba" \
+    CONDA_PREFIX="/root/micromamba/envs/mdx2-dev" \
+    PATH="/root/micromamba/envs/mdx2-dev/bin:/usr/local/bin:/opt/conda/bin:$PATH" \
+    JUPYTER_PORT=8888
+
+RUN mkdir -p /opt/conda
+
+WORKDIR /home/dev
+
+ARG MDX2_COMMIT
+RUN git clone https://github.com/diff-use/mdx2.git /tmp/mdx2 && \
+    cd /tmp/mdx2 && git checkout ${MDX2_COMMIT} && \
+    cp /tmp/mdx2/env.yaml /home/dev/env.yaml
+
+RUN micromamba create -f env.yaml -n mdx2-dev && \
+    micromamba install -y -n mdx2-dev nexpy jupyterlab jupyterlab-h5web dials xia2 wget tar -c conda-forge && \
+    micromamba clean --all --yes
+
+RUN cp -r /tmp/mdx2/* . && rm -rf /tmp/mdx2
+
+RUN micromamba run -n mdx2-dev pip install --no-cache-dir \
+      git+https://github.com/FlexXBeamline/dials-extensions.git@963fe9e458a505a8443c988d45fb8dcb4532768f && \
+    micromamba run -n mdx2-dev pip install --no-cache-dir -e . && \
+    micromamba run -n mdx2-dev pip install --no-cache-dir jupyterhub jupyter-vscode-proxy prefect
+
+COPY pyproject.toml /home/dev/mdx2-workflows/pyproject.toml
+COPY mdx2_workflows/ /home/dev/mdx2-workflows/mdx2_workflows/
+COPY prefect/ /home/dev/mdx2-workflows/prefect/
+
+RUN micromamba run -n mdx2-dev pip install --no-cache-dir /home/dev/mdx2-workflows
+
+EXPOSE 8880-8890

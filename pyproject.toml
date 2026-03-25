@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mdx2-workflows"
+version = "0.1.0"
+description = "Prefect workflow orchestration for mdx2 diffuse scattering data reduction"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">= 3.9"
+dependencies = [
+    "prefect",
+]
+
+[project.urls]
+repository = "https://github.com/diff-use/mdx2-workflows"
+
+[project.scripts]
+"mdx2_workflows.pipeline" = "mdx2_workflows.pipeline:main"
+
+[tool.setuptools.packages.find]
+include = ["mdx2_workflows", "mdx2_workflows.*"]
