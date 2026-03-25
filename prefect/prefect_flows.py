@@ -373,6 +373,7 @@ if __name__ == "__main__":
     import os
     from prefect import serve
 
+    from mdx2_workflows.dials_flow import dials_workflow
     from mdx2_workflows.pipeline import single_crystal_workflow
 
     api_url = os.getenv("PREFECT_API_URL", "http://localhost:4200/api")
@@ -383,4 +384,5 @@ if __name__ == "__main__":
         custom_workflow.to_deployment(name="custom-workflow"),
         directory_setup.to_deployment(name="directory-setup"),
         single_crystal_workflow.to_deployment(name="single-crystal-workflow"),
+        dials_workflow.to_deployment(name="dials-workflow"),
     )

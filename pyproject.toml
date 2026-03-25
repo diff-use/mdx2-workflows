@@ -18,6 +18,7 @@ repository = "https://github.com/diff-use/mdx2-workflows"
 
 [project.scripts]
 "mdx2_workflows.pipeline" = "mdx2_workflows.pipeline:main"
+"mdx2_workflows.dials_flow" = "mdx2_workflows.dials_flow:main"
 
 [tool.setuptools.packages.find]
 include = ["mdx2_workflows", "mdx2_workflows.*"]

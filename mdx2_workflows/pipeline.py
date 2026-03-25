@@ -20,17 +20,40 @@ Run from the mdx2-dev env (e.g. in Docker or with micromamba activate mdx2-dev):
 
 import json
 import logging
+import os
 import shlex
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from prefect import flow, task
 from prefect.logging import get_run_logger
 
-_prefect_dir = Path(__file__).resolve().parent.parent / "prefect"
-if _prefect_dir.is_dir() and str(_prefect_dir) not in sys.path:
+def _find_prefect_flows_dir() -> Optional[Path]:
+    """Locate the directory containing prefect_flows.py.
+
+    When running from source the ``prefect/`` directory is a sibling of the
+    package.  When pip-installed inside a container the source tree may be
+    volume-mounted elsewhere, so we check several candidates.
+    """
+    candidates = [
+        Path(__file__).resolve().parent.parent / "prefect",
+        Path.cwd() / "mdx2-workflows" / "prefect",
+        Path.cwd() / "prefect",
+    ]
+    home = os.environ.get("HOME")
+    if home:
+        candidates.append(Path(home) / "mdx2-workflows" / "prefect")
+    for c in candidates:
+        if (c / "prefect_flows.py").is_file():
+            return c.resolve()
+    return None
+
+
+_prefect_dir = _find_prefect_flows_dir()
+if _prefect_dir and str(_prefect_dir) not in sys.path:
     sys.path.insert(0, str(_prefect_dir))
 
 from prefect_flows import (  # noqa: E402
@@ -241,6 +264,62 @@ def _normalize_dataset_files(files: Any, field_name: str) -> Dict[str, List[str]
     raise ValueError(f"{field_name} must be a dict/list/string, got {type(files).__name__}")
 
 
+STABILITY_SECONDS = 120
+
+
+def _newest_mtime(directory: Path) -> Optional[float]:
+    """Return the mtime of the newest file under *directory*, or None if empty."""
+    newest = None
+    for p in directory.rglob("*"):
+        if p.is_file():
+            mt = p.stat().st_mtime
+            if newest is None or mt > newest:
+                newest = mt
+    return newest
+
+
+@task(persist_result=True, name="wait-for-data-ready")
+def task_wait_for_data_ready(
+    data_dir: str,
+    stability_seconds: float = STABILITY_SECONDS,
+    poll_interval: float = 30,
+) -> float:
+    """Poll *data_dir* until the newest file is older than *stability_seconds*.
+
+    This ensures data collection has finished before the pipeline proceeds.
+    Returns the age (in seconds) of the newest file at the time the check
+    passed.
+    """
+    logger = get_run_logger()
+    target = Path(data_dir).resolve()
+    if not target.is_dir():
+        logger.warning("Data directory does not exist yet: %s — skipping wait", target)
+        return 0.0
+
+    logger.info(
+        "Waiting for data in %s to stabilise (no new files for %ds)…",
+        target, int(stability_seconds),
+    )
+    while True:
+        newest = _newest_mtime(target)
+        if newest is None:
+            logger.info("No files found in %s — skipping wait", target)
+            return 0.0
+        age = time.time() - newest
+        if age >= stability_seconds:
+            logger.info(
+                "Newest file in %s is %.0fs old (threshold %ds) — data is ready",
+                target, age, int(stability_seconds),
+            )
+            return age
+        remaining = stability_seconds - age
+        logger.info(
+            "Newest file in %s is %.0fs old — waiting ~%.0fs more (polling every %ds)",
+            target, age, remaining, int(poll_interval),
+        )
+        time.sleep(min(poll_interval, remaining + 1))
+
+
 # ---------------------------------------------------------------------------
 # Prefect tasks — each pipeline step is a named task for Prefect UI visibility
 # ---------------------------------------------------------------------------
@@ -362,6 +441,7 @@ def single_crystal_workflow(
     datastore_bg: str = "datastore_bg",
     mca2020: bool = False,
     batch_child: bool = False,
+    skip_setup: bool = False,
 ) -> list:
     """
     Run the single-crystal workflow: DIALS then mdx2.
@@ -372,6 +452,9 @@ def single_crystal_workflow(
     import_data → find_peaks → mask_peaks → (background bin) → integrate → correct →
     scale → merge → map. Set run_dials=false if refined.expt and background.expt
     already exist. Config file (deployment.json) can override all parameters.
+
+    Set skip_setup=true to bypass directory_setup and populate_deployment_images,
+    useful when re-running with a manually edited deployment.json after a crash.
     """
     logger = get_run_logger()
 
@@ -412,8 +495,11 @@ def single_crystal_workflow(
         if raw_data_dir and not Path(raw_data_dir).is_absolute():
             raw_data_dir = str((search_dir / raw_data_dir).resolve())
 
+    if raw_data_dir:
+        task_wait_for_data_ready(raw_data_dir)
+
     # Populate crystal_files/background_files from discovered HDF5 masters if empty
-    if run_dials and raw_data_dir and config_path and (not crystal_files or not background_files):
+    if not skip_setup and run_dials and raw_data_dir and config_path and (not crystal_files or not background_files):
         try:
             populated = populate_deployment_images(str(config_path))
             crystal_files = populated.get("crystal_files") or crystal_files
@@ -480,6 +566,7 @@ def single_crystal_workflow(
                         datastore_bg=datastore_bg,
                         mca2020=mca2020,
                         batch_child=True,
+                        skip_setup=skip_setup,
                     )
                 )
             logger.info("Finished batched single-crystal workflow for all datasets.")
@@ -490,7 +577,9 @@ def single_crystal_workflow(
     raw_base = Path(raw_data_dir).resolve() if raw_data_dir else base
 
     # Run directory setup only when expected project folders already exist
-    if raw_data_dir:
+    if skip_setup:
+        logger.info("Skipping directory setup (skip_setup=True)")
+    elif raw_data_dir:
         setup_base = search_dir.parent.parent
         raw_path = setup_base / raw_dir
         processed_path = setup_base / processed_dir
@@ -651,6 +740,10 @@ def main() -> None:
         "--working_dir", "-w", metavar="DIR", default=None,
         help="Working directory for outputs. Defaults to cwd.",
     )
+    parser.add_argument(
+        "--skip_setup", action="store_true", default=False,
+        help="Skip directory setup and image discovery. Use when re-running with a manually edited deployment.json.",
+    )
     args = parser.parse_args()
 
     working_dir = args.working_dir or str(Path.cwd())
@@ -666,7 +759,7 @@ def main() -> None:
     if config_file:
         print(f"Config file: {config_file}")
 
-    single_crystal_workflow(working_dir=working_dir, config_file=config_file)
+    single_crystal_workflow(working_dir=working_dir, config_file=config_file, skip_setup=args.skip_setup)
 
 
 if __name__ == "__main__":
