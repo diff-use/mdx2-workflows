@@ -37,7 +37,7 @@ RUN cp -r /tmp/mdx2/* . && rm -rf /tmp/mdx2
 RUN micromamba run -n mdx2-dev pip install --no-cache-dir \
       git+https://github.com/FlexXBeamline/dials-extensions.git@963fe9e458a505a8443c988d45fb8dcb4532768f && \
     micromamba run -n mdx2-dev pip install --no-cache-dir -e . && \
-    micromamba run -n mdx2-dev pip install --no-cache-dir jupyterhub jupyter-vscode-proxy prefect
+    micromamba run -n mdx2-dev pip install --no-cache-dir jupyterhub jupyter-vscode-proxy "prefect>=2.20,<3"
 
 COPY pyproject.toml /home/dev/mdx2-workflows/pyproject.toml
 COPY mdx2_workflows/ /home/dev/mdx2-workflows/mdx2_workflows/

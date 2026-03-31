@@ -54,9 +54,11 @@ services:
     volumes:
       - ..:/home/workspace
       - /mnt/chess:/mnt/chess
+      - /mnt/als:/mnt/als
       - .:/home/dev
     environment:
       - PREFECT_API_URL=http://prefect-server:4200/api
+      - PYTHONPATH=/home/dev
     networks:
       - prefect-net
     depends_on:

@@ -36,19 +36,20 @@ def _find_prefect_flows_dir() -> Optional[Path]:
 
     When running from source the ``prefect/`` directory is a sibling of the
     package.  When pip-installed inside a container the source tree may be
-    volume-mounted elsewhere, so we check several candidates.
+    volume-mounted elsewhere, so we walk up from cwd checking each ancestor.
     """
-    candidates = [
-        Path(__file__).resolve().parent.parent / "prefect",
-        Path.cwd() / "mdx2-workflows" / "prefect",
-        Path.cwd() / "prefect",
-    ]
-    home = os.environ.get("HOME")
-    if home:
-        candidates.append(Path(home) / "mdx2-workflows" / "prefect")
-    for c in candidates:
-        if (c / "prefect_flows.py").is_file():
-            return c.resolve()
+    # Direct sibling of the package (works when running from source checkout)
+    source_candidate = Path(__file__).resolve().parent.parent / "prefect"
+    if (source_candidate / "prefect_flows.py").is_file():
+        return source_candidate.resolve()
+
+    # Walk up from cwd: at each level check prefect/ and mdx2-workflows/prefect/
+    for ancestor in [Path.cwd().resolve()] + list(Path.cwd().resolve().parents):
+        for subpath in ("mdx2-workflows/prefect", "prefect"):
+            candidate = ancestor / subpath
+            if (candidate / "prefect_flows.py").is_file():
+                return candidate.resolve()
+
     return None
 
 
@@ -351,6 +352,11 @@ def task_dials_find_spots(argv: list, working_dir: Optional[str], log_file: Opti
     return _run_dials_command(argv, working_dir, log_file)
 
 
+@task(persist_result=True, name="dials-spot-counts-per-image")
+def task_dials_spot_counts_per_image(argv: list, working_dir: Optional[str], log_file: Optional[str] = None):
+    return _run_dials_command(argv, working_dir, log_file)
+
+
 @task(persist_result=True, name="dials-index")
 def task_dials_index(argv: list, working_dir: Optional[str], log_file: Optional[str] = None):
     return _run_dials_command(argv, working_dir, log_file)
@@ -363,6 +369,26 @@ def task_dials_refine(argv: list, working_dir: Optional[str], log_file: Optional
 
 @task(persist_result=True, name="dials-import-background")
 def task_dials_import_background(argv: list, working_dir: Optional[str], log_file: Optional[str] = None):
+    return _run_dials_command(argv, working_dir, log_file)
+
+
+@task(persist_result=True, name="dials-integrate")
+def task_dials_integrate(argv: list, working_dir: Optional[str], log_file: Optional[str] = None):
+    return _run_dials_command(argv, working_dir, log_file)
+
+
+@task(persist_result=True, name="dials-scale")
+def task_dials_scale(argv: list, working_dir: Optional[str], log_file: Optional[str] = None):
+    return _run_dials_command(argv, working_dir, log_file)
+
+
+@task(persist_result=True, name="dials-export")
+def task_dials_export(argv: list, working_dir: Optional[str], log_file: Optional[str] = None):
+    return _run_dials_command(argv, working_dir, log_file)
+
+
+@task(persist_result=True, name="dials-merge")
+def task_dials_merge(argv: list, working_dir: Optional[str], log_file: Optional[str] = None):
     return _run_dials_command(argv, working_dir, log_file)
 
 

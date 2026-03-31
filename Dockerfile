@@ -14,5 +14,5 @@ COPY pyproject.toml .
 COPY mdx2_workflows/ mdx2_workflows/
 COPY prefect/ prefect/
 
-RUN micromamba run -n mdx2-dev pip install --no-cache-dir prefect && \
+RUN micromamba run -n mdx2-dev pip install --no-cache-dir "prefect>=2.20,<3" && \
     micromamba run -n mdx2-dev pip install --no-cache-dir .

@@ -1,8 +1,9 @@
 """
 Prefect flow for the DIALS-only portion of the single-crystal workflow.
 
-Runs: dials.import → find_spots → index → refine → import (background).
-Produces refined.expt and background.expt, then stops (no mdx2 steps).
+Runs: dials.import → find_spots → spot_counts_per_image → index → refine →
+integrate → scale → export → merge → import (background).
+Produces scaled/merged outputs and background.expt, then stops (no mdx2 steps).
 
 Config is loaded from deployment.json the same way as the full pipeline.
 Use --file to specify a config file or --working_dir to set the output
@@ -28,11 +29,16 @@ from mdx2_workflows.pipeline import (  # noqa: E402
     load_single_crystal_config,
     load_single_crystal_config_from_file,
     populate_deployment_images,
+    task_dials_export,
     task_dials_find_spots,
     task_dials_import,
     task_dials_import_background,
     task_dials_index,
+    task_dials_integrate,
+    task_dials_merge,
     task_dials_refine,
+    task_dials_scale,
+    task_dials_spot_counts_per_image,
     task_wait_for_data_ready,
 )
 
@@ -50,9 +56,10 @@ def dials_workflow(
     skip_setup: bool = False,
 ) -> list:
     """
-    Run only the DIALS steps: import → find_spots → index → refine,
-    then import the background dataset. Produces refined.expt and
-    background.expt in working_dir.
+    Run only the DIALS steps: import → find_spots → spot_counts_per_image →
+    index → refine → integrate → scale → export → merge, then import the background
+    dataset. Produces scaled/merged outputs and background.expt in
+    working_dir.
 
     Config file (deployment.json) can override all parameters.
     Set skip_setup=true to bypass directory_setup and image discovery,
@@ -142,13 +149,9 @@ def dials_workflow(
                 "Provide matching background files for each dataset."
             )
 
-        if len(crystal_by_dataset) > 1:
-            ds_wd_path = wd_path / dataset
-            ds_wd_path.mkdir(parents=True, exist_ok=True)
-            ds_wd = str(ds_wd_path)
-        else:
-            ds_wd_path = wd_path
-            ds_wd = dials_wd
+        ds_wd_path = wd_path / dataset
+        ds_wd_path.mkdir(parents=True, exist_ok=True)
+        ds_wd = str(ds_wd_path)
 
         crystal_path = str((raw_base / crystal_by_dataset[dataset][0]).resolve())
         background_path = str((raw_base / ds_backgrounds[0]).resolve())
@@ -167,19 +170,42 @@ def dials_workflow(
             ["dials.find_spots", "imported.expt"], ds_wd,
             log_file=str(ds_wd_path / "02_dials_find_spots.log"),
         ))
+        results.append(task_dials_spot_counts_per_image(
+            ["dials.spot_counts_per_image", "imported.expt", "strong.refl",
+             "json=spot_counts_per_image.json"],
+            ds_wd,
+            log_file=str(ds_wd_path / "03_dials_spot_counts_per_image.log"),
+        ))
         results.append(task_dials_index(
             ["dials.index", "imported.expt", "strong.refl", f"space_group={space_group}"],
             ds_wd,
-            log_file=str(ds_wd_path / "03_dials_index.log"),
+            log_file=str(ds_wd_path / "04_dials_index.log"),
         ))
         results.append(task_dials_refine(
             ["dials.refine", "indexed.expt", "indexed.refl"], ds_wd,
-            log_file=str(ds_wd_path / "04_dials_refine.log"),
+            log_file=str(ds_wd_path / "05_dials_refine.log"),
+        ))
+        results.append(task_dials_integrate(
+            ["dials.integrate", "refined.expt", "refined.refl"], ds_wd,
+            log_file=str(ds_wd_path / "06_dials_integrate.log"),
+        ))
+        results.append(task_dials_scale(
+            ["dials.scale", "integrated.expt", "integrated.refl", "absorption_level=medium"],
+            ds_wd,
+            log_file=str(ds_wd_path / "07_dials_scale.log"),
+        ))
+        results.append(task_dials_export(
+            ["dials.export", "scaled.expt", "scaled.refl"], ds_wd,
+            log_file=str(ds_wd_path / "08_dials_export.log"),
+        ))
+        results.append(task_dials_merge(
+            ["dials.merge", "scaled.expt", "scaled.refl"], ds_wd,
+            log_file=str(ds_wd_path / "09_dials_merge.log"),
         ))
         results.append(task_dials_import_background(
             ["dials.import", background_path, "output.experiments=background.expt"],
             ds_wd,
-            log_file=str(ds_wd_path / "05_dials_import_background.log"),
+            log_file=str(ds_wd_path / "10_dials_import_background.log"),
         ))
         all_results.extend(results)
 

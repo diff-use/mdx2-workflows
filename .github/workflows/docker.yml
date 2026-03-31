@@ -27,15 +27,13 @@ jobs:
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "tags=${{ vars.DOCKERHUB_USERNAME }}/mdx2:latest" >> $GITHUB_OUTPUT
-          else
-            echo "tags=${{ vars.DOCKERHUB_USERNAME }}/mdx2:test" >> $GITHUB_OUTPUT
           fi
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: dockerfile
+          context: .github
+          file: Dockerfile
           push: ${{ github.ref == 'refs/heads/main' }}
           tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha

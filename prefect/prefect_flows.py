@@ -72,7 +72,7 @@ def populate_deployment_images(deployment_file: str) -> dict:
     - background_files: list of *_bg_*master.h5 relative to raw_data_dir
     - crystal_files: list of non-bg *_master.h5 relative to raw_data_dir
     """
-    from mdx2.command_line.pipeline import _populate_deployment_images
+    from mdx2_workflows.pipeline import _populate_deployment_images
     return _populate_deployment_images(deployment_file)
 
 
