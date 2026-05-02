@@ -14,8 +14,6 @@
 # built from. mdx2/VERSION=1.0.2. Always use the full 40-char SHA — Docker's
 # `git clone` defaults to a shallow clone that may not resolve short SHAs.
 
-FROM python:3.10-slim AS python_stage
-
 FROM mambaorg/micromamba:1.5.5 AS micromamba_stage
 
 # Isolated stage: clone mdx2 at the pinned commit. Keeps git out of the final image.
@@ -34,7 +32,8 @@ RUN apt-get update \
 RUN git clone https://github.com/diff-use/mdx2.git /tmp/mdx2 \
  && cd /tmp/mdx2 \
  && git fetch origin "${MDX2_PR_REF}:refs/heads/source-pin" \
- && git checkout "${MDX2_COMMIT}"
+ && git checkout "${MDX2_COMMIT}" \
+ && rm -rf .git
 
 FROM debian:stable-slim AS final
 
@@ -46,14 +45,11 @@ RUN apt-get update \
       rsync \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=python_stage /usr/local /usr/local
 COPY --from=micromamba_stage /bin/micromamba /usr/local/bin/micromamba
 
 ENV MAMBA_ROOT_PREFIX="/root/micromamba" \
     CONDA_PREFIX="/root/micromamba/envs/mdx2-dev" \
-    PATH="/root/micromamba/envs/mdx2-dev/bin:/usr/local/bin:/opt/conda/bin:$PATH"
-
-RUN mkdir -p /opt/conda
+    PATH="/root/micromamba/envs/mdx2-dev/bin:/usr/local/bin:$PATH"
 
 WORKDIR /home/dev
 
