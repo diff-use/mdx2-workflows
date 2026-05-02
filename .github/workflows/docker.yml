@@ -17,6 +17,12 @@ permissions:
 env:
   IMAGE_NAME: diffuseproject/mdx2
   IMAGE_TAG: 1.0.2-1
+  # HEAD of feat/jupyterhub-singleuser (PR #56 source ref) on 2026-02-25 —
+  # the commit diffuseproject/mdx2:test was originally built from
+  # (mdx2/VERSION=1.0.2). Reachable only via refs/pull/56/head since the
+  # branch was deleted post-merge; the Dockerfile fetches that ref
+  # explicitly. Bump together with IMAGE_TAG when shipping an mdx2 source
+  # upgrade (e.g. v1.0.4 -> 07f074a, IMAGE_TAG 1.0.2-1 -> 1.0.4-1).
   MDX2_COMMIT: 327bf6e1541e3e0b63a22c8aff100b92c4aa6e39
 
 jobs:
