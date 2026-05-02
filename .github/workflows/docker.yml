@@ -4,7 +4,20 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'Dockerfile.notebook'
+      - 'notebook-env.lock'
+      - '.github/workflows/docker.yml'
   pull_request:
+
+permissions:
+  contents: read
+  actions: write   # for type=gha cache writes
+
+env:
+  IMAGE_NAME: diffuseproject/mdx2
+  IMAGE_TAG: 1.0.2-1
+  MDX2_COMMIT: 327bf6e1541e3e0b63a22c8aff100b92c4aa6e39
 
 jobs:
   notebook:
@@ -24,14 +37,25 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Refuse to overwrite an already-published tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if docker manifest inspect "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" >/dev/null 2>&1; then
+            echo "::error::Tag ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} already exists on Dockerhub."
+            echo "::error::Image tags are immutable. Bump IMAGE_TAG in .github/workflows/docker.yml"
+            echo "::error::(e.g. 1.0.2-1 -> 1.0.2-2 for stack/lockfile changes; 1.0.3-1 for mdx2 source bump) and merge again."
+            exit 1
+          fi
+          echo "Tag ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} is free to publish."
+
       - name: Build (and push on main)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.notebook
           build-args: |
-            MDX2_COMMIT=327bf6e1541e3e0b63a22c8aff100b92c4aa6e39
+            MDX2_COMMIT=${{ env.MDX2_COMMIT }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          tags: diffuseproject/mdx2:1.0.2-1
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=notebook
           cache-to: type=gha,mode=max,scope=notebook
