@@ -40,3 +40,32 @@ jobs:
           tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  notebook:
+    name: notebook image (singleuser)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build (and push on main)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.notebook
+          build-args: |
+            MDX2_COMMIT=327bf6e1541e3e0b63a22c8aff100b92c4aa6e39
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: diffuseproject/mdx2:1.0.2-1
+          cache-from: type=gha,scope=notebook
+          cache-to: type=gha,mode=max,scope=notebook

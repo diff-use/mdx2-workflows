@@ -1,0 +1,75 @@
+# Notebook image for the Diffuse JupyterHub deployment (singleuser pods).
+# Reproduces diffuseproject/mdx2:test using a captured conda lockfile
+# (notebook-env.lock) for byte-equivalent scientific stack parity with prod,
+# plus openssh-client / openssh-sftp-server / rsync so scp/sftp/rsync work
+# through the SSH gateway.
+#
+# Build:
+#   docker buildx build \
+#     --build-arg MDX2_COMMIT=327bf6e1541e3e0b63a22c8aff100b92c4aa6e39 \
+#     -f Dockerfile.notebook -t diffuseproject/mdx2:1.0.2-1 .
+#
+# 327bf6e1541e3e0b63a22c8aff100b92c4aa6e39 is the HEAD of feat/jupyterhub-singleuser
+# (PR #56 source ref) on 2026-02-25, which is what diffuseproject/mdx2:test was
+# built from. mdx2/VERSION=1.0.2. Always use the full 40-char SHA — Docker's
+# `git clone` defaults to a shallow clone that may not resolve short SHAs.
+
+FROM python:3.10-slim AS python_stage
+
+FROM mambaorg/micromamba:1.5.5 AS micromamba_stage
+
+# Isolated stage: clone mdx2 at the pinned commit. Keeps git out of the final image.
+#
+# MDX2_COMMIT is on a deleted branch (`feat/jupyterhub-singleuser`, PR #56) and
+# is only reachable via the PR head ref `refs/pull/56/head`. We fetch that ref
+# explicitly because default `git clone` doesn't fetch refs/pull/* refs.
+# TODO: ask diff-use/mdx2 maintainers to create a durable tag for this commit
+# (e.g. `singleuser-source-pin`) so we can drop the PR-ref dependency.
+FROM debian:stable-slim AS source_stage
+ARG MDX2_COMMIT
+ARG MDX2_PR_REF=pull/56/head
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates git \
+ && rm -rf /var/lib/apt/lists/*
+RUN git clone https://github.com/diff-use/mdx2.git /tmp/mdx2 \
+ && cd /tmp/mdx2 \
+ && git fetch origin "${MDX2_PR_REF}:refs/heads/source-pin" \
+ && git checkout "${MDX2_COMMIT}"
+
+FROM debian:stable-slim AS final
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      openssh-client \
+      openssh-sftp-server \
+      rsync \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=python_stage /usr/local /usr/local
+COPY --from=micromamba_stage /bin/micromamba /usr/local/bin/micromamba
+
+ENV MAMBA_ROOT_PREFIX="/root/micromamba" \
+    CONDA_PREFIX="/root/micromamba/envs/mdx2-dev" \
+    PATH="/root/micromamba/envs/mdx2-dev/bin:/usr/local/bin:/opt/conda/bin:$PATH"
+
+RUN mkdir -p /opt/conda
+
+WORKDIR /home/dev
+
+# Conda env from explicit lockfile — no solve, deterministic, byte-equivalent to live :test pod.
+COPY notebook-env.lock /home/dev/notebook-env.lock
+RUN --mount=type=cache,target=/root/micromamba/pkgs \
+    /usr/local/bin/micromamba create -n mdx2-dev --yes --file /home/dev/notebook-env.lock
+
+COPY --from=source_stage /tmp/mdx2/ /home/dev/
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    /usr/local/bin/micromamba run -n mdx2-dev pip install -e . \
+ && /usr/local/bin/micromamba run -n mdx2-dev pip install \
+      jupyterhub==5.4.3 \
+      jupyter-vscode-proxy==0.7
+
+EXPOSE 8888
+
+CMD ["/usr/local/bin/micromamba", "run", "-n", "mdx2-dev", "jupyterhub-singleuser"]
