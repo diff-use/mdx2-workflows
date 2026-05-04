@@ -1,4 +1,4 @@
-# Upgrading the notebook image (`diffuseproject/mdx2:<tag>`)
+# Upgrading the notebook image (`diffuseproject/mdx2-notebook:<tag>`)
 
 This guide covers how to publish a new version of the JupyterHub singleuser image — the image users get when they spawn a notebook in the Diffuse JupyterHub deployment.
 
@@ -23,7 +23,7 @@ Use this guide when you want to:
 ```
 .github/workflows/docker.yml      # CI/CD
   env:
-    IMAGE_NAME = diffuseproject/mdx2
+    IMAGE_NAME = diffuseproject/mdx2-notebook
     IMAGE_TAG  = <upstream>-<rev>   # e.g. 1.0.2-1
     MDX2_COMMIT = <full SHA>         # mdx2 source commit baked in
 
@@ -33,7 +33,7 @@ Dockerfile.notebook               # multi-stage build
   ↓ pip install -e . + jupyterhub  # editable mdx2 + pinned pip deps
   ↓ apt: openssh + sftp + rsync    # SSH gateway tooling
 
-→ pushes to diffuseproject/mdx2:${IMAGE_TAG} on merge to main
+→ pushes to diffuseproject/mdx2-notebook:${IMAGE_TAG} on merge to main
 ```
 
 Tags follow Debian-revision style: `<mdx2-version>-<our-revision>`. The trailing `-N` increments when our build changes but upstream mdx2 stays put. Tags are **immutable** — the workflow refuses to overwrite an existing tag.
@@ -102,7 +102,7 @@ Edit `.github/workflows/docker.yml`:
 
 ```diff
  env:
-   IMAGE_NAME: diffuseproject/mdx2
+   IMAGE_NAME: diffuseproject/mdx2-notebook
 -  IMAGE_TAG: 1.0.2-1
 +  IMAGE_TAG: 1.0.4-1
 -  # HEAD of feat/jupyterhub-singleuser (PR #56 source ref) on 2026-02-25 — ...
@@ -161,7 +161,7 @@ After webapp deploys, restart the JupyterHub user notebook from the Hub Control 
 ssh diffuse@<sampleworks-host> \
   'sudo k3s kubectl -n jupyterhub get pod jupyter-<your-username> \
      -o jsonpath="{.spec.containers[0].image}"; echo'
-# → diffuseproject/mdx2:1.0.4-1
+# → diffuseproject/mdx2-notebook:1.0.4-1
 ```
 
 ### Scenario B: refresh the conda environment (DIALS bump, security patches)
@@ -283,14 +283,14 @@ You can't. Conda-forge resolves freshly each time, and `git clone` of mdx2 picks
 
 Two checks:
 
-1. Did the new image actually push? `curl -sS "https://hub.docker.com/v2/repositories/diffuseproject/mdx2/tags/" | jq '.results[] | {name, last_updated}'`.
+1. Did the new image actually push? `curl -sS "https://hub.docker.com/v2/repositories/diffuseproject/mdx2-notebook/tags/" | jq '.results[] | {name, last_updated}'`.
 2. Did KubeSpawner pull the new image? Stop the user's server from the Hub Control Panel and start it again. Default `imagePullPolicy: Always` means a fresh pull on each start.
 
 ## Reference: current pipeline state
 
 | Item | Value | Source |
 |---|---|---|
-| Image registry | `diffuseproject/mdx2` | `IMAGE_NAME` in `.github/workflows/docker.yml` |
+| Image registry | `diffuseproject/mdx2-notebook` | `IMAGE_NAME` in `.github/workflows/docker.yml` |
 | Current tag | `1.0.2-1` | `IMAGE_TAG` in `.github/workflows/docker.yml` |
 | mdx2 source pin | `327bf6e1541e3e0b63a22c8aff100b92c4aa6e39` (PR #56 head, deleted branch) | `MDX2_COMMIT` in `.github/workflows/docker.yml` |
 | Conda env source | `notebook-env.lock` (385 packages, conda-forge linux-64) | repo root |

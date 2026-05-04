@@ -7,7 +7,7 @@
 # Build:
 #   docker buildx build \
 #     --build-arg MDX2_COMMIT=327bf6e1541e3e0b63a22c8aff100b92c4aa6e39 \
-#     -f Dockerfile.notebook -t diffuseproject/mdx2:1.0.2-1 .
+#     -f Dockerfile.notebook -t diffuseproject/mdx2-notebook:1.0.2-1 .
 #
 # 327bf6e1541e3e0b63a22c8aff100b92c4aa6e39 is the HEAD of feat/jupyterhub-singleuser
 # (PR #56 source ref) on 2026-02-25, which is what diffuseproject/mdx2:test was
