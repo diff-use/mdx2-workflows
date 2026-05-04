@@ -1,13 +1,13 @@
-# Notebook image for the Diffuse JupyterHub deployment (singleuser pods).
+# JupyterHub singleuser image for the Diffuse deployment (notebook pods).
 # Reproduces diffuseproject/mdx2:test using a captured conda lockfile
-# (notebook-env.lock) for byte-equivalent scientific stack parity with prod,
+# (jhub-env.lock) for byte-equivalent scientific stack parity with prod,
 # plus openssh-client / openssh-sftp-server / rsync so scp/sftp/rsync work
 # through the SSH gateway.
 #
 # Build:
 #   docker buildx build \
 #     --build-arg MDX2_COMMIT=327bf6e1541e3e0b63a22c8aff100b92c4aa6e39 \
-#     -f Dockerfile.notebook -t diffuseproject/mdx2-notebook:1.0.2-1 .
+#     -f Dockerfile.jhub -t diffuseproject/mdx2-jhub:1.0.2-1 .
 #
 # 327bf6e1541e3e0b63a22c8aff100b92c4aa6e39 is the HEAD of feat/jupyterhub-singleuser
 # (PR #56 source ref) on 2026-02-25, which is what diffuseproject/mdx2:test was
@@ -54,9 +54,9 @@ ENV MAMBA_ROOT_PREFIX="/root/micromamba" \
 WORKDIR /home/dev
 
 # Conda env from explicit lockfile — no solve, deterministic, byte-equivalent to live :test pod.
-COPY notebook-env.lock /home/dev/notebook-env.lock
+COPY jhub-env.lock /home/dev/jhub-env.lock
 RUN --mount=type=cache,target=/root/micromamba/pkgs \
-    /usr/local/bin/micromamba create -n mdx2-dev --yes --file /home/dev/notebook-env.lock
+    /usr/local/bin/micromamba create -n mdx2-dev --yes --file /home/dev/jhub-env.lock
 
 COPY --from=source_stage /tmp/mdx2/ /home/dev/
 

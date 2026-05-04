@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'Dockerfile.notebook'
-      - 'notebook-env.lock'
+      - 'Dockerfile.jhub'
+      - 'jhub-env.lock'
       - '.github/workflows/docker.yml'
   pull_request:
 
@@ -15,7 +15,7 @@ permissions:
   actions: write   # for type=gha cache writes
 
 env:
-  IMAGE_NAME: diffuseproject/mdx2-notebook
+  IMAGE_NAME: diffuseproject/mdx2-jhub
   IMAGE_TAG: 1.0.2-1
   # HEAD of feat/jupyterhub-singleuser (PR #56 source ref) on 2026-02-25 —
   # the commit diffuseproject/mdx2:test was originally built from
@@ -26,8 +26,8 @@ env:
   MDX2_COMMIT: 327bf6e1541e3e0b63a22c8aff100b92c4aa6e39
 
 jobs:
-  notebook:
-    name: notebook image (singleuser)
+  jhub:
+    name: jhub image (singleuser)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -58,10 +58,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.notebook
+          file: Dockerfile.jhub
           build-args: |
             MDX2_COMMIT=${{ env.MDX2_COMMIT }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=notebook
-          cache-to: type=gha,mode=max,scope=notebook
+          cache-from: type=gha,scope=jhub
+          cache-to: type=gha,mode=max,scope=jhub
